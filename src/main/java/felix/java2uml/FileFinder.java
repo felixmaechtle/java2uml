@@ -65,7 +65,7 @@ public class FileFinder {
 			for(String path : packages.keySet()) {
 				if (!path.startsWith(basePath)) {
 					exitLoop = true;
-					basePath = basePath.substring(0, basePath.lastIndexOf("/"));
+					basePath = basePath.substring(0, basePath.lastIndexOf(File.separator));
 				}
 				
 				onePath = path;
@@ -75,18 +75,18 @@ public class FileFinder {
 				break;
 			
 			onePath = onePath.substring(basePath.length());
-			onePath = onePath.substring(0, onePath.indexOf("/") + 1); // TODO Windows
+			onePath = onePath.substring(0, onePath.indexOf(File.separator) + 1);
 			basePath += onePath;
 		} while(packages.keySet().size() != 0);
 		
-		basePath = basePath.substring(0, basePath.lastIndexOf("/")); // Der letzte Teil soll noch als Verbindung dran sein
+		basePath = basePath.substring(0, basePath.lastIndexOf(File.separator)); // Der letzte Teil soll noch als Verbindung dran sein
 		
 
 		uml = "@startuml \n\n";
 		// Ordne alles in Packages an:
 		for(String path : packages.keySet()) {
 			
-			String packageName = path.substring(basePath.length() + 1).replace("/", ".");
+			String packageName = path.substring(basePath.length() + 1).replace(File.separator, ".");
 			packageName = packageName.substring(0, packageName.length() - 1);
 			
 			uml += "package " + packageName + " {\n"
@@ -213,7 +213,7 @@ public class FileFinder {
         
         if (!currentWrapper.isEmpty()) {
         	String key = new File(f.toString()).getAbsolutePath();
-        	key = key.substring(0, key.lastIndexOf("/") + 1);
+        	key = key.substring(0, key.lastIndexOf(File.separator) + 1);
         	if (!packages.containsKey(key))
         		packages.put(key, "");
         	
