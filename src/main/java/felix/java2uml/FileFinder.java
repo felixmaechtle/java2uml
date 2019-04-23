@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -20,13 +21,17 @@ import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 public class FileFinder {
 	
 	String path;
-	Stream<Path> files;
+	ArrayList<Path> files;
 	HashMap<String, String> packages;
-	String uml;
+	HashMap<String, String> classes;
 	String currentWrapper = "";
 	String currentMethods = "";
 	String currentVars = "";
 	String currentEnumConstants = "";
+	boolean disableGetterSetter = false;
+	String attributeArrows = "";
+	String currentClassName;
+	ArrayList<String> currentVariables;
 	
 	public FileFinder(String path) {
 		this.path = path;
@@ -34,9 +39,10 @@ public class FileFinder {
 	
 	public void findFiles() {
 		try {
-			files = Files.walk(Paths.get(path))
-			.filter(Files::isRegularFile)
-			.filter( file -> file.toString().endsWith(".java") && !file.toString().endsWith("module-info.java"));
+			files = (ArrayList<Path>) Files.walk(Paths.get(path))
+					.filter(Files::isRegularFile)
+					.filter( file -> file.toString().endsWith(".java") && !file.toString().endsWith("module-info.java"))
+					.collect(Collectors.toList());
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -48,54 +54,13 @@ public class FileFinder {
 			this.findFiles();
 		
 		packages = new HashMap<String, String>();
-		files.forEach(file -> analyseFile(file));
+		classes = new HashMap<String, String>();
+
+		files.forEach(f -> classes.put(f.getFileName().toString().replace(".java", ""), "1"));
+		files.forEach(f -> analyseFile(f));
 	}
 	
-	public void generateUml() {
-		if (files == null)
-			analyseFiles();
-		
-		// Finde den Ordner, den alle noch innehaben
-		String basePath = "";
-		String onePath = "";
-		do {
-			boolean exitLoop = false;
-			
-			// Füge inkrementiv einen neuen Ordner hinzu
-			for(String path : packages.keySet()) {
-				if (!path.startsWith(basePath)) {
-					exitLoop = true;
-					basePath = basePath.substring(0, basePath.lastIndexOf(File.separator));
-				}
-				
-				onePath = path;
-			}
-			
-			if (exitLoop)
-				break;
-			
-			onePath = onePath.substring(basePath.length());
-			onePath = onePath.substring(0, onePath.indexOf(File.separator) + 1);
-			basePath += onePath;
-		} while(packages.keySet().size() != 0);
-		
-		basePath = basePath.substring(0, basePath.lastIndexOf(File.separator)); // Der letzte Teil soll noch als Verbindung dran sein
-		
-
-		uml = "@startuml \n\n";
-		// Ordne alles in Packages an:
-		for(String path : packages.keySet()) {
-			
-			String packageName = path.substring(basePath.length() + 1).replace(File.separator, ".");
-			packageName = packageName.substring(0, packageName.length() - 1);
-			
-			uml += "package " + packageName + " {\n"
-					+ packages.get(path) + "\n"
-					+ "}\n";
-		}
-		
-		uml += "@enduml";
-	}
+	
 	
 	public void analyseFile(Path f) {
 		String file = "";
@@ -113,6 +78,8 @@ public class FileFinder {
 		currentMethods = "";
 		currentVars = "";
 		currentEnumConstants = "";
+		currentClassName = "";
+		currentVariables = new ArrayList<String>();
 		
 		// Finde alle Elemente der Klasse
 		new VoidVisitorAdapter<Object>() {
@@ -127,12 +94,18 @@ public class FileFinder {
                 boolean isAbstract = n.isAbstract();
                 boolean isInterface = n.isInterface();
                 String name = n.getNameAsString();
-                String extendsString = n.getExtendedTypes().size() == 1 ? 
-                		" extends " + n.getExtendedTypes().get(0).getNameAsString() : "";
+                currentClassName = name;
+                String extendsString = 
+                		n.getExtendedTypes().size() == 1 
+                		&& classes.containsKey(getRealClassName(n.getExtendedTypes().get(0).getNameAsString())) ? 
+                		" extends " + getRealClassName(n.getExtendedTypes().get(0).getNameAsString()) : "";
                 
                 String[] interfaces = new String[n.getImplementedTypes().size()];
-                for(int i = 0; i < n.getImplementedTypes().size() - 1; i++) {
-                	interfaces[i] = n.getImplementedTypes().get(i).asString();
+                for(int i = 0; i < n.getImplementedTypes().size(); i++) {
+                	String typus = getRealClassName(n.getImplementedTypes().get(i).asString());
+                	if (classes.containsKey(typus)) {
+                    	interfaces[i] = typus;
+                	}
                 }
                 
                 String implementsString = n.getImplementedTypes().size() > 0 ? 
@@ -141,7 +114,8 @@ public class FileFinder {
                 currentWrapper =
                 		(isAbstract ? "abstract " : "") +
                 		(isInterface ? "interface " : "class ") +
-                		name +
+                		"\"" + name + "\"" +
+                		" as " + name +
                 		extendsString + 
                 		implementsString;
             }
@@ -180,10 +154,15 @@ public class FileFinder {
                 String returnType = n.getTypeAsString();
                 String name = n.getNameAsString();
                 
+                if ((name.startsWith("get") || name.startsWith("set")) && disableGetterSetter)
+                	return;
+                
                 String[] parameters = new String[n.getParameters().size()];
-                for(int i = 0; i < n.getParameters().size() - 1; i++) {
-                	parameters[i] = 
-                			n.getParameters().get(i).getTypeAsString() + " " + n.getParameters().get(i).getNameAsString();
+                for(int i = 0; i <= n.getParameters().size() - 1; i++) {
+               		parameters[i] = 
+               			n.getParameters().get(i).getTypeAsString() 
+               			+ " " 
+             			+ n.getParameters().get(i).getNameAsString();
                 }
                 String paramStr = Stream.of(parameters)
                         .filter(s -> s != null && !s.isEmpty())
@@ -208,6 +187,10 @@ public class FileFinder {
             	String typus = n.getVariable(0).getTypeAsString();
             	
             	currentVars += "    " + visibility + varName + ": " + typus + "\n";
+            	
+            	if (classes.containsKey(typus)) {
+            		currentVariables.add( typus);
+            	}
             }
         }.visit(JavaParser.parse(file), null);
         
@@ -224,24 +207,33 @@ public class FileFinder {
 	        		currentMethods + 
 	        		"}\n\n";
         	
-        	//System.out.println(key);
+        	// Füge die Pfeile ein
+        	for(String vars : currentVariables) {
+        		attributeArrows += currentClassName + " - " + vars + "\n";
+        	}
+        	
         	packages.put(key, packageUml);
         }
 	}
-
-	/**
-	 * @return the uml
-	 */
-	public String getUml() {
-		return uml;
-	}
-
+	
 	private String getAccesibility(String accessibility) {
 		if (accessibility.equals("PRIVATE"))
 			return "-";
 		if (accessibility.equals("PUBLIC"))
 			return "+";
+		if (accessibility.equals("PROTECTED"))
+			return "#";
 		
-		return "FEHLER! : " + accessibility;
+		return "";
 	}
+	
+	private String getRealClassName(String extendingClass) {
+		if (extendingClass.indexOf("<") != -1) {
+			extendingClass = extendingClass.substring(extendingClass.indexOf("<") + 1);
+			extendingClass = extendingClass.substring(0, extendingClass.indexOf(">"));
+		}
+		
+		return extendingClass;
+	}
+	
 }

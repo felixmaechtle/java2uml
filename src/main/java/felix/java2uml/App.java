@@ -1,10 +1,8 @@
 package felix.java2uml;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.nio.charset.Charset;
 
 import javafx.application.Application;
 import javafx.event.EventHandler;
@@ -19,9 +17,6 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import net.sourceforge.plantuml.FileFormat;
-import net.sourceforge.plantuml.FileFormatOption;
-import net.sourceforge.plantuml.SourceStringReader;
 
 /**
  * Hello world!
@@ -29,41 +24,12 @@ import net.sourceforge.plantuml.SourceStringReader;
  */
 public class App extends Application
 {
-	static FileFinder f;
-	Label lbl = new Label("Drag a Folder an the Screen");
+	static UML uml;
+	Label lbl = new Label("Drag a Folder on the Screen");
 	
     public static void main( String[] args )
     {
-    	
     	Application.launch(args);
-    	// String svg = generate(args[0]);
-    	
-    	//System.out.println(svg);
-    }
-    
-    
-    public static String generate(String path) {
-    	
-    	f = new FileFinder(path);
-        f.generateUml();
-    	
-        String svg = "";
-    	
-    	// Write the first image to "os"
-    	try {
-    		SourceStringReader reader = new SourceStringReader(f.getUml());
-        	final ByteArrayOutputStream os = new ByteArrayOutputStream();
-			String desc = reader.generateImage(os, new FileFormatOption(FileFormat.SVG));
-			os.close();
-			// The XML is stored into svg
-	    	svg = new String(os.toByteArray(), Charset.forName("UTF-8"));
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-			return "";
-		}
-    	
-    	return svg;
     }
 
 
@@ -111,7 +77,11 @@ public class App extends Application
          
                     if (file != null) {
                     	lbl.setText("processing");
-                        saveTextToFile(generate(db.getFiles().get(0).toString()), file);
+                    	
+                    	uml = new UML(db.getFiles().get(0).toString());
+                    	uml.disableGetterSetter();
+                    	uml.generateUml();
+                        saveTextToFile(uml.generateSVG(), file);
                     }
                     lbl.setText("done.");
                 }
@@ -146,7 +116,7 @@ public class App extends Application
         stage.show();
 	}
 	
-	private void saveTextToFile(String content, File file) {
+	private static void saveTextToFile(String content, File file) {
         try {
             PrintWriter writer;
             writer = new PrintWriter(file);
